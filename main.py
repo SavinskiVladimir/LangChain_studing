@@ -1,12 +1,11 @@
-import os
-from langchain_openai import ChatOpenAI
-from config import OPENAI_API_KEY
+from langchain_ollama import ChatOllama
 
+model = ChatOllama(
+    model="llama3.1:8b",
+    temperature=0
+)
 
-os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+query = "Какие есть дни недели?"
+response = model.invoke(query)
 
-model = ChatOpenAI(model="gpt-4o-mini")
-
-response = model.invoke("Какой сегодня день?")
-
-print(response.content)
+print(f'Вопрос: {query}, ответ: {response.content}')
