@@ -1,34 +1,82 @@
 from langchain_ollama import ChatOllama
 from retreiver import retriever
 
+
 model = ChatOllama(
     model="llama3.1:8b",
-    temperature=0
+    base_url="http://127.0.0.1:11434",
+    temperature=0,
 )
 
-docs = retriever.invoke(
-    "Как изменить IP-адрес?"
-)
+def ask_question(question: str):
+    docs = retriever.invoke(question)
 
-context = "\n\n".join(
-    doc.page_content
-    for doc in docs
-)
+    if not docs:
+        return "В документах не найдено подходящей информации."
 
-prompt = f"""
-Ты — помощник по документации.
+    context = "\n\n".join(
+        doc.page_content
+        for doc in docs
+    )
 
-Отвечай только на основе предоставленного контекста.
+    # Формируем prompt
+    prompt = f"""
+Ты — помощник по предоставленной документации.
+
+Отвечай только на основе информации из контекста ниже.
+
+Если в контексте нет информации, необходимой для ответа,
+честно скажи:
+
+"В предоставленных документах нет информации по этому вопросу."
+
+Не придумывай факты и не используй знания, которых нет
+в предоставленном контексте.
 
 Контекст:
-
+--------------------
 {context}
+--------------------
 
 Вопрос:
+{question}
 
-Что необходимо делать?
+Ответ:
 """
 
-response = model.invoke(prompt)
+    response = model.invoke(prompt)
+    return response.content
 
-print(response.content)
+
+print("Введите вопрос по вашим документам.")
+print("Для выхода введите: exit")
+print()
+
+while True:
+    question = input("Вы: ").strip()
+
+    if not question:
+        continue
+
+    if question.lower() in {
+        "exit",
+        "quit",
+        "выход",
+    }:
+        print("До свидания!")
+        break
+
+    try:
+        answer = ask_question(question)
+
+        print()
+        print("AI:")
+        print(answer)
+
+        print()
+
+    except Exception as e:
+
+        print()
+        print("Ошибка:", e)
+        print()
