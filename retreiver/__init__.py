@@ -1,12 +1,9 @@
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
+from config import DB_PATH, OLLAMA_URL, EMBEDDING_MODEL
 
 
-DB_PATH = "chroma_db"
 COLLECTION_NAME = "pdf_documents"
-OLLAMA_URL = "http://127.0.0.1:11434"
-EMBEDDING_MODEL = "nomic-embed-text"
-
 
 embeddings = OllamaEmbeddings(
     model=EMBEDDING_MODEL,

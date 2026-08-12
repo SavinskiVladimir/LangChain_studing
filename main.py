@@ -1,56 +1,96 @@
 from langchain_ollama import ChatOllama
-from retreiver import retriever
 
+from retreiver import retriever
+from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+from config import LLM_MODEL, OLLAMA_URL
 
 model = ChatOllama(
-    model="llama3.1:8b",
-    base_url="http://127.0.0.1:11434",
+    model=LLM_MODEL,
+    base_url=OLLAMA_URL,
     temperature=0,
 )
 
-def ask_question(question: str):
+chat_history = InMemoryChatMessageHistory()
+
+prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        """
+        Ты — помощник по предоставленной документации.
+    
+        Отвечай только на основе информации из контекста ниже.
+    
+        Если в контексте нет информации, необходимой для ответа,
+        честно скажи:
+    
+        "В предоставленных документах нет информации по этому вопросу."
+    
+        Не придумывай факты и не используй знания, которых нет
+        в предоставленном контексте.
+        """
+    ),
+    MessagesPlaceholder(
+        variable_name='chat_history'
+    ),
+    (
+        "human",
+        """
+        Контекст:
+        {context}
+        Вопрос:
+        {question}
+        """
+    ),
+])
+
+
+def build_context(docs):
+    context_parts = []
+    for doc in docs:
+        source = doc.metadata.get("source", "неизвестный файл")
+        page = doc.metadata.get("page", None)
+
+        if page is not None:
+            page += 1
+
+        context_parts.append(
+            f"""
+            Источник: {source}
+            Страница: {page}
+    
+            {doc.page_content}
+            """
+        )
+
+        return "\n\n".join(context_parts)
+
+def ask_question(question):
     docs = retriever.invoke(question)
-
     if not docs:
-        return "В документах не найдено подходящей информации."
+        answer = ("Не найдено подходящей информации")
 
-    context = "\n\n".join(
-        doc.page_content
-        for doc in docs
-    )
+        chat_history.add_user_message(question)
+        chat_history.add_ai_message(answer)
 
-    # Формируем prompt
-    prompt = f"""
-Ты — помощник по предоставленной документации.
+        return answer, []
 
-Отвечай только на основе информации из контекста ниже.
+    context = build_context(docs)
 
-Если в контексте нет информации, необходимой для ответа,
-честно скажи:
+    messages = prompt.invoke({
+        'chat_history': chat_history.messages,
+        'context': context,
+        'question': question,
+    })
 
-"В предоставленных документах нет информации по этому вопросу."
+    responses = model.invoke(messages)
 
-Не придумывай факты и не используй знания, которых нет
-в предоставленном контексте.
+    chat_history.add_user_message(question)
+    chat_history.add_ai_message(responses.content)
 
-Контекст:
---------------------
-{context}
---------------------
+    return responses.content, docs
 
-Вопрос:
-{question}
-
-Ответ:
-"""
-
-    response = model.invoke(prompt)
-    return response.content
-
-
-print("Введите вопрос по вашим документам.")
-print("Для выхода введите: exit")
-print()
 
 while True:
     question = input("Вы: ").strip()
@@ -66,17 +106,36 @@ while True:
         print("До свидания!")
         break
 
+    if question.lower() == "clear":
+        chat_history.clear()
+        print("История очищена\n")
+        continue
+
     try:
-        answer = ask_question(question)
+        answer, docs = ask_question(question)
 
         print()
         print("AI:")
         print(answer)
 
         print()
+        print("Источники:")
+        sources = set()
+        for doc in docs:
+            source = doc.metadata.get("source", "неизвестный файл")
+            page = doc.metadata.get("page", None)
+
+            if page is not None:
+                page += 1
+
+            sources.add((source, page))
+
+        for source, page in sorted(sources):
+            if page is not None:
+                print(f"- {source}, стр. {page}")
+            else:
+                print(f"- {source}")
+        print()
 
     except Exception as e:
-
-        print()
-        print("Ошибка:", e)
-        print()
+        print(f"Ошибка: {e}")
